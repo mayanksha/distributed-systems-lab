@@ -5,23 +5,20 @@ import (
 	"time"
 )
 
-func process(ch chan string) {
-	time.Sleep(10500 * time.Millisecond)
-	ch <- "process successful"
+func pinger(c chan string) {
+	for i := 0; i < 3; i++ {
+		c <- "ping"
+		time.Sleep(time.Second)
+	}
+	/* close(c) */
 }
 
 func main() {
-	ch := make(chan string)
-	go process(ch)
-	for {
-		time.Sleep(1000 * time.Millisecond)
-		select {
-		case v := <-ch:
-			fmt.Println("received value: ", v)
-			return
-		default:
-			fmt.Println("no value received")
-		}
-	}
+	var c chan string = make(chan string)
 
+	go pinger(c)
+
+	for msg := range c {
+		fmt.Println(msg)
+	}
 }

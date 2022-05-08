@@ -1,10 +1,15 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
-
+import (
+	"fmt"
+	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"net/rpc"
+	"os"
+	"path"
+	"time"
+)
 
 //
 // Map functions return a slice of KeyValue.
@@ -24,41 +29,98 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
+func getHash(key string, nReduce int) int {
+	return ihash(key) % nReduce
+}
 
 //
 // main/mrworker.go calls this function.
 //
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
-
 	// Your worker implementation here.
+	var allMapsDoneChan chan bool = make(chan bool, 1)
 
-	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+	go getAndProcessMapJob(allMapsDoneChan, mapf, reducef)
+
+	for allMapsDone := range allMapsDoneChan {
+		if allMapsDone {
+			break
+		}
+		// If all the maps are not done, we'll check with the coordinator again
+		// But Let's wait a second before pinging the coordinator
+		time.Sleep(time.Second)
+
+		go getAndProcessMapJob(allMapsDoneChan, mapf, reducef)
+	}
 
 }
 
-//
-// example function to show how to make an RPC call to the coordinator.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func CallExample() {
+func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
+	_, reply := getMapJobFromCoordinator()
+
+	defer func(cha chan bool, r *MapJobReply) { ch <- r.AreAllMapsDone }(ch, reply)
+
+	// For now, in each call to the Coordinator, we'll only send a single file in the reply
+	if len(reply.Files) > 1 {
+		log.Fatalf("[Worker] Error. Only one file needs to be there in MapJobReply.")
+	}
+
+	filename := reply.Files[0]
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("[Worker] Error. Cannot open %v", filename)
+	}
+
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("[Worker] Error. cannot read %v", filename)
+	}
+
+	file.Close()
+
+	kva := mapf(filename, string(content))
+
+	dir, _ := os.Getwd()
+	dirPath := path.Join(dir, "intermediate-output")
+	err = os.Mkdir(dirPath, 0777)
+
+	/* if err != nil {
+	 *     fmt.Printf("[Worker] Error. Couldn't create directory with path: %v", dirPath)
+	 * } */
+
+	intermediateFilePath := path.Join(dirPath, fmt.Sprintf("inter-out-%d", reply.Id))
+	ofile, err := os.Create(intermediateFilePath)
+	if err != nil {
+		log.Fatalf("[Worker] Error. Cannot create file at path %v", intermediateFilePath)
+	}
+
+	for _, val := range kva {
+		fmt.Fprintf(ofile, "%v %v\n", val.Key, filename)
+	}
+
+	ofile.Close()
+
+}
+
+func getMapJobFromCoordinator() (*MapJobRequest, *MapJobReply) {
 
 	// declare an argument structure.
-	args := ExampleArgs{}
-
-	// fill in the argument(s).
-	args.X = 99
+	args := MapJobRequest{}
 
 	// declare a reply structure.
-	reply := ExampleReply{}
+	reply := MapJobReply{}
 
 	// send the RPC request, wait for the reply.
-	call("Coordinator.Example", &args, &reply)
+	status := call("Coordinator.GetMapJob", &args, &reply)
+	if !status {
+		log.Fatalf("[Worker] Error while getting a valid MapJobReply")
+	}
 
 	// reply.Y should be 100.
-	fmt.Printf("reply.Y %v\n", reply.Y)
+	fmt.Printf("received reply from coordinator. reply: %v\n", reply)
+
+	return &args, &reply
 }
 
 //
