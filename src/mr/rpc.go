@@ -27,20 +27,27 @@ type ExampleReply struct {
 // My code
 
 const (
-	NOT_STARTED = 0
-	PROCESSING  = 1
-	TIMED_OUT   = 2
-	DONE        = 3
+	NOT_STARTED     = 0
+	PROCESSING      = 1
+	TIMED_OUT       = 2
+	DONE            = 3
+	WAIT_FOR_OTHERS = 4
+	ALL_DONE        = 5
 )
 
-type MapJobRequest struct{}
+type WorkerMapJobRequest struct {
+	CoordMapJob CoordMapJobReply
+}
 
-type MapJobReply struct {
-	Id             int // outputs inter-out-${id} file
-	Status         int // Current status of the job (as seen by coordinator) -- means whether all the map jobs have completed successfully or not
-	NReduce        int // number of workers performing the reduce step
-	Files          []string
-	AreAllMapsDone bool
+type WorkerMapJobReply struct{}
+
+type CoordMapJobRequest struct{}
+
+type CoordMapJobReply struct {
+	Id      int // outputs inter-out-${id} file
+	Status  int // Current status of the job (as seen by coordinator) -- means whether all the map jobs have completed successfully or not
+	NReduce int // number of workers performing the reduce step
+	Files   []string
 }
 
 type ReduceJobRequest struct{}

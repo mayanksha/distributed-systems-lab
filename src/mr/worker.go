@@ -54,16 +54,25 @@ func Worker(mapf func(string, string) []KeyValue,
 		go getAndProcessMapJob(allMapsDoneChan, mapf, reducef)
 	}
 
+	fmt.Println("[Worker] All the map jobs have been done. Starting Reduce step now.")
+
 }
 
 func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
 	_, reply := getMapJobFromCoordinator()
 
-	defer func(cha chan bool, r *MapJobReply) { ch <- r.AreAllMapsDone }(ch, reply)
+	defer func(cha chan bool, r *CoordMapJobReply) {
+		cha <- r.Status == ALL_DONE
+	}(ch, reply)
+
+	fmt.Printf("[Worker] Reply before check: %v\n", reply)
+	if reply.Status == ALL_DONE || (reply.Status == WAIT_FOR_OTHERS && len(reply.Files) == 0) {
+		return
+	}
 
 	// For now, in each call to the Coordinator, we'll only send a single file in the reply
 	if len(reply.Files) > 1 {
-		log.Fatalf("[Worker] Error. Only one file needs to be there in MapJobReply.")
+		log.Fatalf("[Worker] Error. Only one file needs to be there in CoordMapJobReply.")
 	}
 
 	filename := reply.Files[0]
@@ -101,23 +110,37 @@ func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue, red
 
 	ofile.Close()
 
+	markMapJobDone(reply)
+
 }
 
-func getMapJobFromCoordinator() (*MapJobRequest, *MapJobReply) {
-
+func markMapJobDone(job *CoordMapJobReply) {
 	// declare an argument structure.
-	args := MapJobRequest{}
+	args := WorkerMapJobRequest{CoordMapJob: *job}
 
 	// declare a reply structure.
-	reply := MapJobReply{}
+	reply := WorkerMapJobReply{}
+
+	// send the RPC request, wait for the reply.
+	status := call("Coordinator.MarkMapJobDone", &args, &reply)
+	if !status {
+		log.Fatalf("[Worker] Error while updating the status of current job. Job: %v", args.CoordMapJob)
+	}
+}
+
+func getMapJobFromCoordinator() (*CoordMapJobRequest, *CoordMapJobReply) {
+	// declare an argument structure.
+	args := CoordMapJobRequest{}
+
+	// declare a reply structure.
+	reply := CoordMapJobReply{}
 
 	// send the RPC request, wait for the reply.
 	status := call("Coordinator.GetMapJob", &args, &reply)
 	if !status {
-		log.Fatalf("[Worker] Error while getting a valid MapJobReply")
+		log.Fatalf("[Worker] Error while getting a valid CoordMapJobReply")
 	}
 
-	// reply.Y should be 100.
 	fmt.Printf("received reply from coordinator. reply: %v\n", reply)
 
 	return &args, &reply

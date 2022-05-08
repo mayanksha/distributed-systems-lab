@@ -8,8 +8,6 @@ import (
 	"net/rpc"
 	"os"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 type Coordinator struct {
@@ -35,7 +33,19 @@ func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
 	return nil
 }
 
-func (c *Coordinator) GetMapJob(req *MapJobRequest, reply *MapJobReply) error {
+func (c *Coordinator) MarkMapJobDone(req *WorkerMapJobRequest, reply *WorkerMapJobReply) error {
+	fileName := req.CoordMapJob.Files[0]
+
+	c.Lock.Lock()
+	defer c.Lock.Unlock()
+	c.FilesToProcess[fileName] = DONE
+
+	fmt.Printf("[Coord] Job done. fileName: %v\n", fileName)
+
+	return nil
+}
+
+func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply) error {
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
 
@@ -43,31 +53,35 @@ func (c *Coordinator) GetMapJob(req *MapJobRequest, reply *MapJobReply) error {
 	areAllMapJobsDone := true
 
 	for key, val := range c.FilesToProcess {
+		areAllMapJobsDone = areAllMapJobsDone && (val == DONE)
 		if val == NOT_STARTED || val == TIMED_OUT {
 			fileName = key
+			break
 		}
-		areAllMapJobsDone = areAllMapJobsDone && (val == DONE)
 	}
 
 	if fileName == "" {
 		if areAllMapJobsDone {
-			return errors.New(fmt.Sprintf("[Coord] Error. All the map jobs have been completed. c.FilesToProcess: %v", c.FilesToProcess))
+			logStr := fmt.Sprintf("[Coord] All the map jobs have been completed. c.FilesToProcess: %v", c.FilesToProcess)
+			fmt.Println(logStr)
+			reply.Status = ALL_DONE
+			return nil
 		} else {
-			return errors.New(fmt.Sprintf("[Coord] Error. All the map jobs are in processing state. c.FilesToProcess: %v", c.FilesToProcess))
+			logStr := fmt.Sprintf("[Coord] All the map jobs are in processing state. c.FilesToProcess: %v", c.FilesToProcess)
+			fmt.Println(logStr)
+			reply.Status = WAIT_FOR_OTHERS
+			return nil
 		}
 	}
 
 	c.FilesToProcess[fileName] = PROCESSING
 
 	reply.Id = c.CurrMapJobID
-	reply.Status = c.FilesToProcess[fileName]
+	reply.Status = PROCESSING
 	reply.NReduce = c.NReduce
 	reply.Files = c.AllFiles[reply.Id : reply.Id+1] // We'll take the file in the reply.Id position
 
 	c.CurrMapJobID++
-
-	// If we call the Done() method before unlocking the mutex, we'll create a Deadlock
-	reply.AreAllMapsDone = false
 
 	fmt.Printf("got a request for MapJob. reply: %v\n", reply)
 	return nil
