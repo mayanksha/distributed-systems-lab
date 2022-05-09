@@ -109,7 +109,7 @@ func getAndProcessReduceJob(ch chan bool, reducef func(string, []string) string)
 		cha <- r.Status == ALL_DONE
 	}(ch, reply)
 
-	fmt.Printf("[Worker] Reduce -- Reply before check: %v\n", reply)
+	fmt.Printf("[Worker] Reduce -- Reply value before check: %v\n", reply)
 	if reply.Status == ALL_DONE || (reply.Status == WAIT_FOR_OTHERS && len(reply.Files) == 0) {
 		return
 	}
@@ -206,7 +206,7 @@ func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue) {
 		cha <- r.Status == ALL_DONE
 	}(ch, reply)
 
-	fmt.Printf("[Worker] Map -- Reply before check: %v\n", reply)
+	fmt.Printf("[Worker] Map -- Reply value before check: %v\n", reply)
 	if reply.Status == ALL_DONE || (reply.Status == WAIT_FOR_OTHERS && len(reply.Files) == 0) {
 		return
 	}

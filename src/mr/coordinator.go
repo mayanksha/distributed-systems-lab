@@ -55,7 +55,7 @@ func (c *Coordinator) MarkReduceJobDone(req *WorkerReduceJobRequest, reply *Work
 	filePath := req.CoordReduceJob.Files[0]
 	c.TempFiles[filePath] = JobInfo{Status: DONE, StartTime: c.TempFiles[filePath].StartTime}
 
-	elapsed := time.Since(c.TempFiles[filePath].StartTime)
+	elapsed := time.Since(c.TempFiles[filePath].StartTime).Milliseconds()
 	fmt.Printf("[Coord] Reduce Job done. elapsed: %v, filePath: %v\n", elapsed, filePath)
 
 	return nil
@@ -76,7 +76,7 @@ func (c *Coordinator) MarkMapJobDone(req *WorkerMapJobRequest, reply *WorkerMapJ
 		fmt.Printf("[Coord] Map Job done. fileName: %v, TempFilePaths: %v\n", fileName, req.TempFilePaths)
 	}
 
-	elapsed := time.Since(c.TempFiles[fileName].StartTime)
+	elapsed := time.Since(c.FilesToProcess[fileName].StartTime).Milliseconds()
 	fmt.Printf("[Coord] Map Job done. elapsed: %v, fileName: %v\n", elapsed, fileName)
 
 	return nil
@@ -103,8 +103,8 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 	sortedKeys := getSortedKeysFromMap(&c.TempFiles)
 
 	for _, val := range sortedKeys {
-		// If the file hasn't even started processing, then we ignore its duration check
-		if c.TempFiles[val].Status == NOT_STARTED {
+		// If the file is not in PROCESSING or TIMED_OUT state, we ignore that
+		if (c.TempFiles[val].Status != PROCESSING) && (c.TempFiles[val].Status != TIMED_OUT) {
 			break
 		}
 		elapsed := time.Since(c.TempFiles[val].StartTime).Milliseconds()
@@ -171,8 +171,8 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 	sortedKeys := getSortedKeysFromMap(&c.FilesToProcess)
 
 	for _, val := range sortedKeys {
-		// If the file hasn't even started processing, then we ignore its duration check
-		if c.FilesToProcess[val].Status == NOT_STARTED {
+		// If the file is not in PROCESSING or TIMED_OUT state, we ignore that
+		if (c.FilesToProcess[val].Status != PROCESSING) && (c.FilesToProcess[val].Status != TIMED_OUT) {
 			break
 		}
 		elapsed := time.Since(c.FilesToProcess[val].StartTime).Milliseconds()
@@ -193,7 +193,7 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 
 	if fileName == "" {
 		if areAllMapJobsDone {
-			logStr := fmt.Sprintf("[Coord] All the map jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
+			logStr := fmt.Sprintf("[Coord] All the map jobs have been completed. c.TempFilesPath: %v\nc.FilesToProcess: %v\n", c.TempFiles, c.FilesToProcess)
 			fmt.Println(logStr)
 			fmt.Printf("****************************************************\n\n\n")
 			reply.Status = ALL_DONE
