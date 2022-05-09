@@ -50,9 +50,9 @@ type CoordMapJobReply struct {
 	Files   []string
 }
 
-type ReduceJobRequest struct{}
+type CoordReduceJobRequest struct{}
 
-type ReduceJobReply struct {
+type CoordReduceJobReply struct {
 	Id int // corresponds to inter-out-${id} file
 }
 

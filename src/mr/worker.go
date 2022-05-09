@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"io/ioutil"
@@ -40,8 +41,9 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 	// Your worker implementation here.
 	var allMapsDoneChan chan bool = make(chan bool, 1)
+	var allReducesDoneChan chan bool = make(chan bool, 1)
 
-	go getAndProcessMapJob(allMapsDoneChan, mapf, reducef)
+	go getAndProcessMapJob(allMapsDoneChan, mapf)
 
 	for allMapsDone := range allMapsDoneChan {
 		if allMapsDone {
@@ -51,14 +53,16 @@ func Worker(mapf func(string, string) []KeyValue,
 		// But Let's wait a second before pinging the coordinator
 		time.Sleep(time.Millisecond * 100)
 
-		go getAndProcessMapJob(allMapsDoneChan, mapf, reducef)
+		go getAndProcessMapJob(allMapsDoneChan, mapf)
 	}
 
 	fmt.Println("[Worker] All the map jobs have been done. Starting Reduce step now.")
 
+	go getAndProcessReduceJob(allReducesDoneChan, reducef)
+
 }
 
-func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue, reducef func(string, []string) string) {
+func getAndProcessReduceJob(ch chan bool, reducef func(string, []string) string) {
 	_, reply := getMapJobFromCoordinator()
 
 	defer func(cha chan bool, r *CoordMapJobReply) {
@@ -104,11 +108,84 @@ func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue, red
 		log.Fatalf("[Worker] Error. Cannot create file at path %v", intermediateFilePath)
 	}
 
-	for _, val := range kva {
-		fmt.Fprintf(ofile, "%v %v\n", val.Key, filename)
+	defer ofile.Close()
+
+	/* for _, val := range kva {
+	 *     fmt.Fprintf(ofile, "%v %v\n", val.Key, filename)
+	 * } */
+
+	/* ofile, err := ioutil.TempFile(dirPath, "inter-*.json")
+	 * defer ofile.Close() */
+
+	enc := json.NewEncoder(ofile)
+	err = enc.Encode(&kva)
+	if err != nil {
+		log.Fatalf("[Worker] Error. Cannot write the output to file: %v", ofile.Name())
 	}
 
-	ofile.Close()
+	markMapJobDone(reply)
+
+}
+func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue) {
+	_, reply := getMapJobFromCoordinator()
+
+	defer func(cha chan bool, r *CoordMapJobReply) {
+		cha <- r.Status == ALL_DONE
+	}(ch, reply)
+
+	fmt.Printf("[Worker] Reply before check: %v\n", reply)
+	if reply.Status == ALL_DONE || (reply.Status == WAIT_FOR_OTHERS && len(reply.Files) == 0) {
+		return
+	}
+
+	// For now, in each call to the Coordinator, we'll only send a single file in the reply
+	if len(reply.Files) > 1 {
+		log.Fatalf("[Worker] Error. Only one file needs to be there in CoordMapJobReply.")
+	}
+
+	filename := reply.Files[0]
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("[Worker] Error. Cannot open %v", filename)
+	}
+
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("[Worker] Error. cannot read %v", filename)
+	}
+
+	file.Close()
+
+	kva := mapf(filename, string(content))
+
+	dir, _ := os.Getwd()
+	dirPath := path.Join(dir, "intermediate-output")
+	err = os.Mkdir(dirPath, 0777)
+
+	/* if err != nil {
+	 *     fmt.Printf("[Worker] Error. Couldn't create directory with path: %v", dirPath)
+	 * } */
+
+	intermediateFilePath := path.Join(dirPath, fmt.Sprintf("inter-out-%d", reply.Id))
+	ofile, err := os.Create(intermediateFilePath)
+	if err != nil {
+		log.Fatalf("[Worker] Error. Cannot create file at path %v", intermediateFilePath)
+	}
+
+	defer ofile.Close()
+
+	/* for _, val := range kva {
+	 *     fmt.Fprintf(ofile, "%v %v\n", val.Key, filename)
+	 * } */
+
+	/* ofile, err := ioutil.TempFile(dirPath, "inter-*.json")
+	 * defer ofile.Close() */
+
+	enc := json.NewEncoder(ofile)
+	err = enc.Encode(&kva)
+	if err != nil {
+		log.Fatalf("[Worker] Error. Cannot write the output to file: %v", ofile.Name())
+	}
 
 	markMapJobDone(reply)
 
