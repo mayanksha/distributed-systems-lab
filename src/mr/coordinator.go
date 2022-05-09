@@ -100,8 +100,8 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 
 	if filePath == "" {
 		if areAllReduceJobsDone {
-			logStr := fmt.Sprintf("[Coord] All the reduce jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
-			fmt.Println(logStr)
+			/* logStr := fmt.Sprintf("[Coord] All the reduce jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
+			 * fmt.Println(logStr) */
 			reply.Status = ALL_DONE
 
 			/* if len(c.TempFiles) != len(c.TempFiles) {
@@ -112,8 +112,8 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 			c.IsMapReduceDone = true
 			return nil
 		} else {
-			logStr := fmt.Sprintf("[Coord] All the reduce jobs are in processing state. c.TempFiles: %v", c.TempFiles)
-			fmt.Println(logStr)
+			/* logStr := fmt.Sprintf("[Coord] All the reduce jobs are in processing state. c.TempFiles: %v", c.TempFiles)
+			 * fmt.Println(logStr) */
 			reply.Status = WAIT_FOR_OTHERS
 			return nil
 		}
@@ -129,7 +129,7 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 
 	c.CurrReduceJobID++
 
-	fmt.Printf("got a request for ReduceJob. reply: %v\n", reply)
+	/* fmt.Printf("got a request for ReduceJob. reply: %v\n", reply) */
 	return nil
 }
 
@@ -154,8 +154,8 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 
 	if fileName == "" {
 		if areAllMapJobsDone {
-			logStr := fmt.Sprintf("[Coord] All the map jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
-			fmt.Println(logStr)
+			/* logStr := fmt.Sprintf("[Coord] All the map jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
+			 * fmt.Println(logStr) */
 			reply.Status = ALL_DONE
 
 			if len(c.TempFiles) != len(c.FilesToProcess) {
@@ -163,8 +163,8 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 			}
 			return nil
 		} else {
-			logStr := fmt.Sprintf("[Coord] All the map jobs are in processing state. c.FilesToProcess: %v", c.FilesToProcess)
-			fmt.Println(logStr)
+			/* logStr := fmt.Sprintf("[Coord] All the map jobs are in processing state. c.FilesToProcess: %v", c.FilesToProcess)
+			 * fmt.Println(logStr) */
 			reply.Status = WAIT_FOR_OTHERS
 			return nil
 		}
@@ -180,7 +180,7 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 
 	c.CurrMapJobID++
 
-	fmt.Printf("got a request for MapJob. reply: %v\n", reply)
+	/* fmt.Printf("got a request for MapJob. reply: %v\n", reply) */
 	return nil
 }
 
