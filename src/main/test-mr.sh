@@ -4,6 +4,7 @@
 # basic map-reduce test
 #
 
+set -x
 #RACE=
 
 # comment this to run the tests without the Go race detector.

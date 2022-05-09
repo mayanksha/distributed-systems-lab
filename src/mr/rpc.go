@@ -36,10 +36,17 @@ const (
 )
 
 type WorkerMapJobRequest struct {
-	CoordMapJob CoordMapJobReply
+	CoordMapJob   CoordMapJobReply // The job
+	TempFilePaths []string         // Full path of the intermediate file
 }
 
 type WorkerMapJobReply struct{}
+
+type WorkerReduceJobRequest struct {
+	CoordReduceJob CoordReduceJobReply // The job
+}
+
+type WorkerReduceJobReply struct{}
 
 type CoordMapJobRequest struct{}
 
@@ -47,13 +54,18 @@ type CoordMapJobReply struct {
 	Id      int // outputs inter-out-${id} file
 	Status  int // Current status of the job (as seen by coordinator) -- means whether all the map jobs have completed successfully or not
 	NReduce int // number of workers performing the reduce step
+	NMap    int // number of workers performing the map step
 	Files   []string
 }
 
 type CoordReduceJobRequest struct{}
 
 type CoordReduceJobReply struct {
-	Id int // corresponds to inter-out-${id} file
+	Id      int // ID of the current job
+	Status  int // Current status of the job (as seen by coordinator)
+	NReduce int // number of workers performing the reduce step
+	NMap    int // number of workers performing the map step
+	Files   []string
 }
 
 // Add your RPC definitions here.
