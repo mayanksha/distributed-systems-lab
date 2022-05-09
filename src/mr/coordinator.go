@@ -105,13 +105,12 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 	for _, val := range sortedKeys {
 		// If the file is not in PROCESSING or TIMED_OUT state, we ignore that
 		if (c.TempFiles[val].Status != PROCESSING) && (c.TempFiles[val].Status != TIMED_OUT) {
-			break
+			continue
 		}
 		elapsed := time.Since(c.TempFiles[val].StartTime).Milliseconds()
 		if elapsed > JOB_TIMEOUT {
 			fmt.Printf("[REDUCE] One of the jobs has timed out. val: %v, JobInfo: %v, elapsed: %v\n", val, c.FilesToProcess[val], elapsed)
 			c.TempFiles[val] = JobInfo{Status: TIMED_OUT, StartTime: c.TempFiles[val].StartTime}
-			break
 		}
 	}
 
@@ -173,13 +172,12 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 	for _, val := range sortedKeys {
 		// If the file is not in PROCESSING or TIMED_OUT state, we ignore that
 		if (c.FilesToProcess[val].Status != PROCESSING) && (c.FilesToProcess[val].Status != TIMED_OUT) {
-			break
+			continue
 		}
 		elapsed := time.Since(c.FilesToProcess[val].StartTime).Milliseconds()
 		if elapsed > JOB_TIMEOUT {
 			fmt.Printf("[MAP] One of the jobs has timed out. val: %v, JobInfo: %v, elapsed: %v\n", val, c.FilesToProcess[val], elapsed)
 			c.FilesToProcess[val] = JobInfo{Status: TIMED_OUT, StartTime: c.FilesToProcess[val].StartTime}
-			break
 		}
 	}
 

@@ -226,12 +226,12 @@ failed_any=0
 echo '***' Starting crash test.
 
 # generate the correct output
-../mrsequential ../../mrapps/nocrash.so ../pg-being_ernest.txt ../pg-dorian_gray.txt ../pg-frankenstein.txt ../pg-grimm.txt ../pg-huckleberry_finn.txt  || exit 1
+../mrsequential ../../mrapps/nocrash.so ../pg-*.txt  || exit 1
 sort mr-out-0 > mr-correct-crash.txt
 rm -f mr-out*
 
 rm -f mr-done
-(timeout -k 2s 180s ../mrcoordinator  ../pg-being_ernest.txt ../pg-dorian_gray.txt ../pg-frankenstein.txt ../pg-grimm.txt ../pg-huckleberry_finn.txt ; touch mr-done ) &
+(timeout -k 2s 180s ../mrcoordinator  ../pg-*.txt ; touch mr-done ) &
 sleep 1
 
 # start multiple workers

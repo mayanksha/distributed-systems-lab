@@ -249,7 +249,7 @@ func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue) {
 
 	for _, val := range kva {
 		index := getHash(val.Key, reply.NMap)
-		fmt.Fprintf(outFiles[index], "%v,%v,%v\n", val.Key, val.Value, filename)
+		fmt.Fprintf(outFiles[index], "%v,%v\n", val.Key, val.Value)
 	}
 
 	markMapJobDone(outFiles, reply)
