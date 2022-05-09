@@ -49,7 +49,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		}
 		// If all the maps are not done, we'll check with the coordinator again
 		// But Let's wait a second before pinging the coordinator
-		time.Sleep(time.Second)
+		time.Sleep(time.Millisecond * 100)
 
 		go getAndProcessMapJob(allMapsDoneChan, mapf, reducef)
 	}

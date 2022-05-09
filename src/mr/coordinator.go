@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"sort"
 	"sync"
 )
 
@@ -45,6 +46,15 @@ func (c *Coordinator) MarkMapJobDone(req *WorkerMapJobRequest, reply *WorkerMapJ
 	return nil
 }
 
+func getSortedKeysFromMap(m *map[string]int) []string {
+	keys := make([]string, 0, len(*m))
+	for k := range *m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply) error {
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
@@ -52,10 +62,14 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 	fileName := ""
 	areAllMapJobsDone := true
 
-	for key, val := range c.FilesToProcess {
-		areAllMapJobsDone = areAllMapJobsDone && (val == DONE)
-		if val == NOT_STARTED || val == TIMED_OUT {
-			fileName = key
+	// We need to get the sorted keys from the map because the order of iteration on a map is not guaranteed,
+	// and especially so when we're updating the values in the map too
+	sortedKeys := getSortedKeysFromMap(&c.FilesToProcess)
+
+	for _, val := range sortedKeys {
+		areAllMapJobsDone = areAllMapJobsDone && (c.FilesToProcess[val] == DONE)
+		if c.FilesToProcess[val] == NOT_STARTED || c.FilesToProcess[val] == TIMED_OUT {
+			fileName = val
 			break
 		}
 	}
