@@ -10,20 +10,30 @@ import (
 	"path"
 	"sort"
 	"sync"
+	"time"
 )
+
+const (
+	JOB_TIMEOUT = 10000 // Default job timeout in milliseconds
+)
+
+type JobInfo struct {
+	Status    int
+	StartTime time.Time
+}
 
 type Coordinator struct {
 	// Your definitions here.
 
-	CurrMapJobID    int            // the current JOB ID for the Map JOB
-	CurrReduceJobID int            // the current JOB ID for the Reduce JOB
-	Lock            *sync.Mutex    // Lock for CurrMapJobID
-	AllFiles        []string       // list of files
-	NReduce         int            // no. of workers performing the reduce step
-	NMap            int            // no. of workers performing the map step
-	FilesToProcess  map[string]int // Store filename -> int i.e. status of a particular file
-	IsMapReduceDone bool           // Whether both the map and reduce operations are done or not
-	TempFiles       map[string]int // Temporary files
+	CurrMapJobID    int                // the current JOB ID for the Map JOB
+	CurrReduceJobID int                // the current JOB ID for the Reduce JOB
+	Lock            *sync.Mutex        // Lock for CurrMapJobID
+	AllFiles        []string           // list of files
+	NReduce         int                // no. of workers performing the reduce step
+	NMap            int                // no. of workers performing the map step
+	FilesToProcess  map[string]JobInfo // Store filename -> int i.e. status of a particular file
+	IsMapReduceDone bool               // Whether both the map and reduce operations are done or not
+	TempFiles       map[string]JobInfo // Temporary files
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -43,9 +53,10 @@ func (c *Coordinator) MarkReduceJobDone(req *WorkerReduceJobRequest, reply *Work
 	defer c.Lock.Unlock()
 
 	filePath := req.CoordReduceJob.Files[0]
-	c.TempFiles[filePath] = DONE
+	c.TempFiles[filePath] = JobInfo{Status: DONE, StartTime: c.TempFiles[filePath].StartTime}
 
-	fmt.Printf("[Coord] Reduce Job done. req: %v\n", req)
+	elapsed := time.Since(c.TempFiles[filePath].StartTime)
+	fmt.Printf("[Coord] Reduce Job done. elapsed: %v, filePath: %v\n", elapsed, filePath)
 
 	return nil
 }
@@ -55,22 +66,23 @@ func (c *Coordinator) MarkMapJobDone(req *WorkerMapJobRequest, reply *WorkerMapJ
 
 	c.Lock.Lock()
 	defer c.Lock.Unlock()
-	c.FilesToProcess[fileName] = DONE
+	c.FilesToProcess[fileName] = JobInfo{Status: DONE, StartTime: c.FilesToProcess[fileName].StartTime}
 
 	// If the TempFiles haven't been updated by some worker yet, we updated it
 	if len(c.TempFiles) == 0 {
 		for _, val := range req.TempFilePaths {
-			c.TempFiles[val] = NOT_STARTED
+			c.TempFiles[val] = JobInfo{Status: NOT_STARTED}
 		}
-		fmt.Printf("[Coord] Job done. fileName: %v, TempFilePaths: %v\n", fileName, req.TempFilePaths)
+		fmt.Printf("[Coord] Map Job done. fileName: %v, TempFilePaths: %v\n", fileName, req.TempFilePaths)
 	}
 
-	fmt.Printf("[Coord] Job done. fileName: %v\n", fileName)
+	elapsed := time.Since(c.TempFiles[fileName].StartTime)
+	fmt.Printf("[Coord] Map Job done. elapsed: %v, fileName: %v\n", elapsed, fileName)
 
 	return nil
 }
 
-func getSortedKeysFromMap(m *map[string]int) []string {
+func getSortedKeysFromMap(m *map[string]JobInfo) []string {
 	keys := make([]string, 0, len(*m))
 	for k := range *m {
 		keys = append(keys, k)
@@ -91,8 +103,21 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 	sortedKeys := getSortedKeysFromMap(&c.TempFiles)
 
 	for _, val := range sortedKeys {
-		areAllReduceJobsDone = areAllReduceJobsDone && (c.TempFiles[val] == DONE)
-		if c.TempFiles[val] == NOT_STARTED || c.TempFiles[val] == TIMED_OUT {
+		// If the file hasn't even started processing, then we ignore its duration check
+		if c.TempFiles[val].Status == NOT_STARTED {
+			break
+		}
+		elapsed := time.Since(c.TempFiles[val].StartTime).Milliseconds()
+		if elapsed > JOB_TIMEOUT {
+			fmt.Printf("[REDUCE] One of the jobs has timed out. val: %v, JobInfo: %v, elapsed: %v\n", val, c.FilesToProcess[val], elapsed)
+			c.TempFiles[val] = JobInfo{Status: TIMED_OUT, StartTime: c.TempFiles[val].StartTime}
+			break
+		}
+	}
+
+	for _, val := range sortedKeys {
+		areAllReduceJobsDone = areAllReduceJobsDone && (c.TempFiles[val].Status == DONE)
+		if c.TempFiles[val].Status == NOT_STARTED || c.TempFiles[val].Status == TIMED_OUT {
 			filePath = val
 			break
 		}
@@ -100,8 +125,9 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 
 	if filePath == "" {
 		if areAllReduceJobsDone {
-			/* logStr := fmt.Sprintf("[Coord] All the reduce jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
-			 * fmt.Println(logStr) */
+			logStr := fmt.Sprintf("[Coord] All the reduce jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
+			fmt.Println(logStr)
+			fmt.Printf("****************************************************\n\n\n")
 			reply.Status = ALL_DONE
 
 			/* if len(c.TempFiles) != len(c.TempFiles) {
@@ -112,14 +138,14 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 			c.IsMapReduceDone = true
 			return nil
 		} else {
-			/* logStr := fmt.Sprintf("[Coord] All the reduce jobs are in processing state. c.TempFiles: %v", c.TempFiles)
-			 * fmt.Println(logStr) */
+			logStr := fmt.Sprintf("[Coord] All the reduce jobs are in processing state. c.TempFiles: %v", c.TempFiles)
+			fmt.Println(logStr)
 			reply.Status = WAIT_FOR_OTHERS
 			return nil
 		}
 	}
 
-	c.TempFiles[filePath] = PROCESSING
+	c.TempFiles[filePath] = JobInfo{Status: PROCESSING, StartTime: time.Now()}
 
 	reply.Id = c.CurrReduceJobID
 	reply.Status = PROCESSING
@@ -129,7 +155,7 @@ func (c *Coordinator) GetReduceJob(req *CoordReduceJobRequest, reply *CoordReduc
 
 	c.CurrReduceJobID++
 
-	/* fmt.Printf("got a request for ReduceJob. reply: %v\n", reply) */
+	fmt.Printf("got a request for ReduceJob. reply: %v\n", reply)
 	return nil
 }
 
@@ -140,13 +166,26 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 	fileName := ""
 	areAllMapJobsDone := true
 
-	// We need to get the sorted keys from the map because the order of iteration on a map is not guaranteed,
-	// and especially so when we're updating the values in the map too
+	// We need to get the sorted keys from the map because the order of iteration on a map
+	// is not guaranteed, and especially so when we're updating the values in the map too
 	sortedKeys := getSortedKeysFromMap(&c.FilesToProcess)
 
 	for _, val := range sortedKeys {
-		areAllMapJobsDone = areAllMapJobsDone && (c.FilesToProcess[val] == DONE)
-		if c.FilesToProcess[val] == NOT_STARTED || c.FilesToProcess[val] == TIMED_OUT {
+		// If the file hasn't even started processing, then we ignore its duration check
+		if c.FilesToProcess[val].Status == NOT_STARTED {
+			break
+		}
+		elapsed := time.Since(c.FilesToProcess[val].StartTime).Milliseconds()
+		if elapsed > JOB_TIMEOUT {
+			fmt.Printf("[MAP] One of the jobs has timed out. val: %v, JobInfo: %v, elapsed: %v\n", val, c.FilesToProcess[val], elapsed)
+			c.FilesToProcess[val] = JobInfo{Status: TIMED_OUT, StartTime: c.FilesToProcess[val].StartTime}
+			break
+		}
+	}
+
+	for _, val := range sortedKeys {
+		areAllMapJobsDone = areAllMapJobsDone && (c.FilesToProcess[val].Status == DONE)
+		if c.FilesToProcess[val].Status == NOT_STARTED || c.FilesToProcess[val].Status == TIMED_OUT {
 			fileName = val
 			break
 		}
@@ -154,8 +193,9 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 
 	if fileName == "" {
 		if areAllMapJobsDone {
-			/* logStr := fmt.Sprintf("[Coord] All the map jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
-			 * fmt.Println(logStr) */
+			logStr := fmt.Sprintf("[Coord] All the map jobs have been completed. c.TempFilesPath: %v", c.TempFiles)
+			fmt.Println(logStr)
+			fmt.Printf("****************************************************\n\n\n")
 			reply.Status = ALL_DONE
 
 			if len(c.TempFiles) != len(c.FilesToProcess) {
@@ -163,14 +203,14 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 			}
 			return nil
 		} else {
-			/* logStr := fmt.Sprintf("[Coord] All the map jobs are in processing state. c.FilesToProcess: %v", c.FilesToProcess)
-			 * fmt.Println(logStr) */
+			logStr := fmt.Sprintf("[Coord] All the map jobs are in processing state. c.FilesToProcess: %v", c.FilesToProcess)
+			fmt.Println(logStr)
 			reply.Status = WAIT_FOR_OTHERS
 			return nil
 		}
 	}
 
-	c.FilesToProcess[fileName] = PROCESSING
+	c.FilesToProcess[fileName] = JobInfo{Status: PROCESSING, StartTime: time.Now()}
 
 	reply.Id = c.CurrMapJobID
 	reply.Status = PROCESSING
@@ -180,7 +220,7 @@ func (c *Coordinator) GetMapJob(req *CoordMapJobRequest, reply *CoordMapJobReply
 
 	c.CurrMapJobID++
 
-	/* fmt.Printf("got a request for MapJob. reply: %v\n", reply) */
+	fmt.Printf("got a request for MapJob. reply: %v\n", reply)
 	return nil
 }
 
@@ -216,10 +256,10 @@ func (c *Coordinator) Done() bool {
 // nReduce is the number of reduce tasks to use.
 //
 func MakeCoordinator(files []string, nReduce int) *Coordinator {
-	filesToProcess := make(map[string]int)
+	filesToProcess := make(map[string]JobInfo)
 
 	for _, v := range files {
-		filesToProcess[v] = NOT_STARTED
+		filesToProcess[v] = JobInfo{Status: NOT_STARTED}
 	}
 
 	dir, _ := os.Getwd()
@@ -233,7 +273,7 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 
 	c := Coordinator{
 		CurrMapJobID: 0, CurrReduceJobID: 0, Lock: &sync.Mutex{}, AllFiles: files, NReduce: nReduce,
-		NMap: len(files), FilesToProcess: filesToProcess, TempFiles: make(map[string]int),
+		NMap: len(files), FilesToProcess: filesToProcess, TempFiles: make(map[string]JobInfo),
 	}
 
 	fmt.Printf("Starting the coordinator. nReduce: %v\n", nReduce)

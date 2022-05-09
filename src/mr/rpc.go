@@ -52,7 +52,7 @@ type CoordMapJobRequest struct{}
 
 type CoordMapJobReply struct {
 	Id      int // outputs inter-out-${id} file
-	Status  int // Current status of the job (as seen by coordinator) -- means whether all the map jobs have completed successfully or not
+	Status  int // Current status of the job (as seen by coordinator)
 	NReduce int // number of workers performing the reduce step
 	NMap    int // number of workers performing the map step
 	Files   []string
