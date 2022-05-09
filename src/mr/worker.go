@@ -66,8 +66,8 @@ func Worker(mapf func(string, string) []KeyValue,
 		go getAndProcessMapJob(allMapsDoneChan, mapf)
 	}
 
-	fmt.Println("[Worker] All the map jobs have been done. Starting Reduce step now.")
-	fmt.Printf("****************************************************\n\n\n")
+	// fmt.Println("[Worker] All the map jobs have been done. Starting Reduce step now.")
+	// fmt.Printf("****************************************************\n\n\n")
 
 	go getAndProcessReduceJob(allReducesDoneChan, reducef)
 	for allReducesDone := range allReducesDoneChan {
@@ -97,7 +97,7 @@ func getReduceJobFromCoordinator() (*CoordReduceJobRequest, *CoordReduceJobReply
 		log.Fatalf("[Worker] Error while getting a valid CoordReduceJobReply")
 	}
 
-	fmt.Printf("received reply from coordinator. reply: %v\n", reply)
+	// fmt.Printf("received reply from coordinator. reply: %v\n", reply)
 
 	return &args, &reply
 }
@@ -109,7 +109,7 @@ func getAndProcessReduceJob(ch chan bool, reducef func(string, []string) string)
 		cha <- r.Status == ALL_DONE
 	}(ch, reply)
 
-	fmt.Printf("[Worker] Reduce -- Reply value before check: %v\n", reply)
+	// fmt.Printf("[Worker] Reduce -- Reply value before check: %v\n", reply)
 	if reply.Status == ALL_DONE || (reply.Status == WAIT_FOR_OTHERS && len(reply.Files) == 0) {
 		return
 	}
@@ -177,7 +177,7 @@ func getAndProcessReduceJob(ch chan bool, reducef func(string, []string) string)
 	}
 
 	markReduceJobDone(reply)
-	fmt.Printf("[REDUCE] Successfully marked the file as done. job: %v\n", reply)
+	// fmt.Printf("[REDUCE] Successfully marked the file as done. job: %v\n", reply)
 
 }
 
@@ -194,7 +194,7 @@ func getMapJobFromCoordinator() (*CoordMapJobRequest, *CoordMapJobReply) {
 		log.Fatalf("[Worker] Error while getting a valid CoordMapJobReply")
 	}
 
-	fmt.Printf("received reply from coordinator. reply: %v\n", reply)
+	// fmt.Printf("received reply from coordinator. reply: %v\n", reply)
 
 	return &args, &reply
 }
@@ -206,7 +206,7 @@ func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue) {
 		cha <- r.Status == ALL_DONE
 	}(ch, reply)
 
-	fmt.Printf("[Worker] Map -- Reply value before check: %v\n", reply)
+	// fmt.Printf("[Worker] Map -- Reply value before check: %v\n", reply)
 	if reply.Status == ALL_DONE || (reply.Status == WAIT_FOR_OTHERS && len(reply.Files) == 0) {
 		return
 	}
@@ -254,7 +254,7 @@ func getAndProcessMapJob(ch chan bool, mapf func(string, string) []KeyValue) {
 
 	markMapJobDone(outFiles, reply)
 
-	fmt.Printf("[MAP] Successfully marked the file as done. job: %v\n", reply)
+	// fmt.Printf("[MAP] Successfully marked the file as done. job: %v\n", reply)
 
 }
 
@@ -310,6 +310,6 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 		return true
 	}
 
-	fmt.Println(err)
+	// fmt.Println(err)
 	return false
 }
